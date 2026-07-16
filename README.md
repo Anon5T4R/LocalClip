@@ -3,8 +3,13 @@
 Histórico de área de transferência **100% local** da suíte Local — copiou,
 está no histórico; um clique traz de volta.
 
-## Recursos (v0.1)
+## Recursos
 
+**v0.2**
+- **Recopiar imagem** com um clique (não só texto)
+- **Retenção configurável** (10–5000 itens) nas Configurações
+
+**v0.1**
 - **Captura automática** de texto e imagem (poller leve, dedup — recopiar o
   mesmo conteúdo só sobe pro topo)
 - **Popup por atalho global**: `Ctrl+Shift+V` mostra/esconde a janela com a

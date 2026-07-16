@@ -1,15 +1,28 @@
+import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { LOCALE_LABELS, setLocale, t, useLocale, type Locale } from "../lib/i18n";
 import { useUi, type Theme } from "../state/ui";
 
-/** Configurações: tema e idioma (padrão da suíte). */
+/** Configurações: tema, idioma e retenção do histórico. */
 export default function SettingsModal() {
   const open = useUi((s) => s.settingsOpen);
   const setOpen = useUi((s) => s.setSettingsOpen);
   const theme = useUi((s) => s.theme);
   const setTheme = useUi((s) => s.setTheme);
   const locale = useLocale();
+  const [retention, setRetention] = useState(500);
+
+  useEffect(() => {
+    if (open) void invoke<number>("get_retention").then(setRetention).catch(() => {});
+  }, [open]);
 
   if (!open) return null;
+
+  const commitRetention = (v: number) => {
+    const clamped = Math.min(5000, Math.max(10, Math.round(v) || 500));
+    setRetention(clamped);
+    void invoke("set_retention", { value: clamped }).catch(() => {});
+  };
 
   const themes: { value: Theme; label: string }[] = [
     { value: "system", label: t("settings.themeSystem") },
@@ -46,6 +59,20 @@ export default function SettingsModal() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="settings-row">
+          <span>{t("settings.retention")}</span>
+          <input
+            type="number"
+            min={10}
+            max={5000}
+            step={50}
+            value={retention}
+            style={{ width: 90 }}
+            onChange={(e) => setRetention(Number(e.target.value))}
+            onBlur={(e) => commitRetention(Number(e.target.value))}
+          />
         </div>
 
         <p className="muted about">

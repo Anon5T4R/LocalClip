@@ -49,6 +49,7 @@ const pt = {
   "settings.themeLight": "Claro",
   "settings.themeDark": "Escuro",
   "settings.language": "Idioma",
+  "settings.retention": "Itens no histórico",
   "settings.privacy":
     "Privacidade: tudo fica NESTA máquina (SQLite local, retenção de 500 itens; fixados não expiram). Conteúdo marcado como sensível (LocalKeys e gerenciadores de senha usam a flag ExcludeClipboardContentFromMonitorProcessing) NÃO é capturado.",
   "settings.shortcut": "Atalho global: Ctrl+Shift+V mostra/esconde o popup.",
@@ -89,6 +90,7 @@ const en: Record<MessageKey, string> = {
   "settings.themeLight": "Light",
   "settings.themeDark": "Dark",
   "settings.language": "Language",
+  "settings.retention": "Items in history",
   "settings.privacy":
     "Privacy: everything stays on THIS machine (local SQLite, 500-item retention; pinned items never expire). Content flagged as sensitive (LocalKeys and password managers use the ExcludeClipboardContentFromMonitorProcessing flag) is NOT captured.",
   "settings.shortcut": "Global shortcut: Ctrl+Shift+V shows/hides the popup.",
@@ -127,6 +129,7 @@ const es: Record<MessageKey, string> = {
   "settings.themeLight": "Claro",
   "settings.themeDark": "Oscuro",
   "settings.language": "Idioma",
+  "settings.retention": "Elementos en el historial",
   "settings.privacy":
     "Privacidad: todo se queda en ESTA máquina (SQLite local, retención de 500 elementos; los fijados no caducan). El contenido marcado como sensible (LocalKeys y los gestores de contraseñas usan la bandera ExcludeClipboardContentFromMonitorProcessing) NO se captura.",
   "settings.shortcut": "Atajo global: Ctrl+Shift+V muestra/oculta el popup.",

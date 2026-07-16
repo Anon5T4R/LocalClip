@@ -1,6 +1,6 @@
 [package]
 name = "localclip"
-version = "0.1.0"
+version = "0.2.0"
 description = "LocalClip — histórico de área de transferência 100% local"
 authors = ["Taylor"]
 edition = "2021"

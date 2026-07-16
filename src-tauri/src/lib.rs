@@ -79,13 +79,24 @@ fn open_db(path: &std::path::Path) -> Result<Connection, String> {
            pinned INTEGER NOT NULL DEFAULT 0,
            created_ms INTEGER NOT NULL
          );
-         CREATE INDEX IF NOT EXISTS idx_items_created ON items(pinned DESC, created_ms DESC);",
+         CREATE INDEX IF NOT EXISTS idx_items_created ON items(pinned DESC, created_ms DESC);
+         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
     )
     .map_err(|e| e.to_string())?;
     Ok(conn)
 }
 
 const DEFAULT_RETENTION: i64 = 500;
+
+fn retention(conn: &Connection) -> i64 {
+    conn.query_row("SELECT value FROM meta WHERE key = 'retention'", [], |r| {
+        r.get::<_, String>(0)
+    })
+    .ok()
+    .and_then(|s| s.parse().ok())
+    .filter(|n: &i64| *n >= 10 && *n <= 5000)
+    .unwrap_or(DEFAULT_RETENTION)
+}
 
 fn insert_item(
     conn: &Connection,
@@ -109,11 +120,11 @@ fn insert_item(
         rusqlite::params![kind, content, image, hash, now_ms()],
     )
     .map_err(|e| e.to_string())?;
-    // Retenção: apaga os mais velhos não fixados além do teto.
+    // Retenção: apaga os mais velhos não fixados além do teto (configurável).
     conn.execute(
         "DELETE FROM items WHERE pinned = 0 AND id NOT IN (
            SELECT id FROM items WHERE pinned = 0 ORDER BY created_ms DESC LIMIT ?1)",
-        [DEFAULT_RETENTION],
+        [retention(conn)],
     )
     .map_err(|e| e.to_string())?;
     Ok(true)
@@ -231,23 +242,30 @@ fn copy_item(app: AppHandle, id: i64) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())
     })?;
+    SKIP_NEXT.store(true, Ordering::Relaxed);
     if kind == "text" {
-        SKIP_NEXT.store(true, Ordering::Relaxed);
         app.clipboard()
             .write_text(content.unwrap_or_default())
             .map_err(|e| e.to_string())?;
-        // Sobe pro topo (é o item "atual" de novo).
-        with_conn(&app, |conn| {
-            conn.execute("UPDATE items SET created_ms = ?1 WHERE id = ?2", rusqlite::params![now_ms(), id])
-                .map_err(|e| e.to_string())?;
-            Ok(())
-        })?;
-        let _ = app.emit("clip-changed", ());
-        Ok(())
     } else {
-        // Recolocar imagem no clipboard fica pra v0.2 (write_image + decode).
-        Err("recopiar imagem chega na v0.2".into())
+        // Imagem: decodifica o PNG guardado → RGBA → Image do Tauri.
+        let png: Vec<u8> = with_conn(&app, |conn| {
+            conn.query_row("SELECT image FROM items WHERE id = ?1", [id], |r| r.get(0))
+                .map_err(|e| e.to_string())
+        })?;
+        let img = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgba8();
+        let (w, h) = (img.width(), img.height());
+        let tauri_img = tauri::image::Image::new_owned(img.into_raw(), w, h);
+        app.clipboard().write_image(&tauri_img).map_err(|e| e.to_string())?;
     }
+    // Sobe pro topo (é o item "atual" de novo).
+    with_conn(&app, |conn| {
+        conn.execute("UPDATE items SET created_ms = ?1 WHERE id = ?2", rusqlite::params![now_ms(), id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })?;
+    let _ = app.emit("clip-changed", ());
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -265,6 +283,34 @@ fn toggle_pin(app: AppHandle, id: i64) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         Ok(())
     })
+}
+
+#[tauri::command(async)]
+fn get_retention(app: AppHandle) -> Result<i64, String> {
+    with_conn(&app, |conn| Ok(retention(conn)))
+}
+
+/// Define quantos itens não fixados manter (10–5000) e apara na hora.
+#[tauri::command(async)]
+fn set_retention(app: AppHandle, value: i64) -> Result<(), String> {
+    let v = value.clamp(10, 5000);
+    with_conn(&app, |conn| {
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES ('retention', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [v.to_string()],
+        )
+        .map_err(|e| e.to_string())?;
+        conn.execute(
+            "DELETE FROM items WHERE pinned = 0 AND id NOT IN (
+               SELECT id FROM items WHERE pinned = 0 ORDER BY created_ms DESC LIMIT ?1)",
+            [v],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    })?;
+    let _ = app.emit("clip-changed", ());
+    Ok(())
 }
 
 /// Limpa o histórico (fixados ficam).
@@ -339,6 +385,8 @@ pub fn run() {
             delete_item,
             toggle_pin,
             clear_all,
+            get_retention,
+            set_retention,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
