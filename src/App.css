@@ -1,0 +1,259 @@
+:root {
+  --bg: #f4f6fb;
+  --panel: #ffffff;
+  --panel-2: #f7f9fc;
+  --text: #16202e;
+  --muted: #6a7688;
+  --border: #e3e8f0;
+  --accent: #059669;
+  --accent-2: #34d399;
+  --accent-ink: #ffffff;
+  --sel-bg: #d1fae5;
+  --danger: #dc2626;
+  --err-bg: #fef2f2;
+  --err-border: #fca5a5;
+  --shadow: 0 10px 30px rgba(20, 40, 90, 0.12);
+  --radius: 12px;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e131b;
+  --panel: #161d28;
+  --panel-2: #1b2431;
+  --text: #e7edf5;
+  --muted: #8695a8;
+  --border: #27313f;
+  --accent: #34d399;
+  --accent-2: #6ee7b7;
+  --accent-ink: #032a1c;
+  --sel-bg: #0d3a2a;
+  --danger: #f87171;
+  --err-bg: #2a1414;
+  --err-border: #7f1d1d;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  transition: background 0.12s, border-color 0.12s;
+}
+button:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+button.primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-ink);
+  border: none;
+  font-weight: 600;
+}
+input {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+/* ---------- topo ---------- */
+.topbar {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.search {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- lista ---------- */
+.list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.list-msg {
+  text-align: center;
+  padding: 32px 16px;
+  line-height: 1.5;
+}
+.clip-item {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.clip-item.pinned {
+  border-color: var(--accent);
+}
+.clip-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  text-align: left;
+  border: none;
+  border-radius: 0;
+  padding: 9px 12px;
+  background: transparent;
+}
+.clip-body:hover {
+  background: var(--sel-bg);
+}
+.clip-text {
+  font-size: 13px;
+  line-height: 1.4;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.clip-img {
+  max-width: 100%;
+  max-height: 110px;
+  border-radius: 6px;
+}
+.clip-when {
+  font-size: 11px;
+}
+.clip-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+}
+.clip-actions button {
+  border: none;
+  background: transparent;
+  padding: 2px 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.clip-actions button:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+/* ---------- modal / toasts / util ---------- */
+.muted {
+  color: var(--muted);
+}
+.about {
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin-top: 10px;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  width: min(400px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.modal h2 {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+.segmented {
+  display: flex;
+  gap: 4px;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+.toasts {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 200;
+}
+.toast {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 9px 16px;
+  cursor: pointer;
+  max-width: 85vw;
+}
+.toast.ok {
+  border-color: var(--accent);
+}
+.toast.error {
+  background: var(--err-bg);
+  border-color: var(--err-border);
+}

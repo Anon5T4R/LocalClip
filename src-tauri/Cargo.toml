@@ -1,0 +1,38 @@
+[package]
+name = "localclip"
+version = "0.1.0"
+description = "LocalClip — histórico de área de transferência 100% local"
+authors = ["Taylor"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Anon5T4R/LocalClip"
+
+[lib]
+# O sufixo `_lib` evita conflito entre o nome da lib e o do binário no Windows
+# (https://github.com/rust-lang/cargo/issues/8519).
+name = "localclip_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Histórico num SQLite único em app_data (padrão da suíte).
+rusqlite = { version = "0.32", features = ["bundled"] }
+# Encode das capturas de imagem pra PNG (miniatura + blob).
+image = "0.25"
+base64 = "0.22"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = "2"
+# Popup por atalho global (Ctrl+Shift+V).
+tauri-plugin-global-shortcut = "2"
+
+[target.'cfg(windows)'.dependencies]
+# Checa a flag ExcludeClipboardContentFromMonitorProcessing (LocalKeys marca;
+# gerenciador de clipboard DECENTE não captura senha).
+clipboard-win = "5"
