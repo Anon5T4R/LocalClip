@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import SettingsModal from "./components/SettingsModal";
 import Toasts from "./components/Toasts";
 import { localeTag, t } from "./lib/i18n";
@@ -17,10 +18,15 @@ interface ItemRow {
   createdMs: number;
 }
 
+type TypeFilter = "all" | "text" | "image";
+
 export default function App() {
   const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [items, setItems] = useState<ItemRow[]>([]);
+  const [sel, setSel] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const setSettingsOpen = useUi((s) => s.setSettingsOpen);
   const pushToast = useUi((s) => s.pushToast);
 
@@ -52,15 +58,24 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
+  const shown = useMemo(
+    () => (typeFilter === "all" ? items : items.filter((i) => i.kind === typeFilter)),
+    [items, typeFilter],
+  );
+  const selClamped = Math.min(sel, Math.max(0, shown.length - 1));
+
   const copy = async (item: ItemRow) => {
     try {
       await invoke("copy_item", { id: item.id });
-      pushToast("ok", t("toast.copied"));
       await reload(query);
+      // Esconde a janela: devolve o foco pro app anterior (é só apertar Ctrl+V).
+      if (isTauri) void getCurrentWindow().hide().catch(() => {});
     } catch (e) {
       pushToast("error", t("toast.copyFailed", { error: String(e) }));
     }
   };
+
+  const remove = (id: number) => void invoke("delete_item", { id }).then(() => reload(query));
 
   const clearAll = async () => {
     if (!window.confirm(t("top.clearConfirm"))) return;
@@ -69,7 +84,48 @@ export default function App() {
     await reload(query);
   };
 
+  // Navegação por teclado: ↑/↓ mover, Enter copiar (e esconder), Del apagar,
+  // Esc limpa a busca ou esconde a janela.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const inSearch = document.activeElement === searchRef.current;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSel((s) => Math.min(shown.length - 1, s + 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSel((s) => Math.max(0, s - 1));
+      } else if (e.key === "Enter") {
+        if (shown[selClamped]) void copy(shown[selClamped]);
+      } else if (e.key === "Delete" && !inSearch) {
+        if (shown[selClamped]) remove(shown[selClamped].id);
+      } else if (e.key === "Escape") {
+        if (query) setQuery("");
+        else if (isTauri) void getCurrentWindow().hide().catch(() => {});
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown, selClamped, query]);
+
+  // Rola a seleção pra dentro da vista.
+  useEffect(() => {
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-idx="${selClamped}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selClamped]);
+
   const labels = { now: t("time.now"), min: t("time.min"), hour: t("time.hour") };
+
+  const typeBtn = (kind: TypeFilter, label: string) => (
+    <button
+      className={`chip ${typeFilter === kind ? "active" : ""}`}
+      onClick={() => setTypeFilter(kind)}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="app">
@@ -82,9 +138,6 @@ export default function App() {
           spellCheck={false}
           autoFocus
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setQuery("");
-          }}
         />
         <button title={t("top.clear")} onClick={() => void clearAll()}>
           🗑
@@ -94,16 +147,29 @@ export default function App() {
         </button>
       </div>
 
-      <div className="list">
-        {items.length === 0 && (
+      <div className="filter-row">
+        {typeBtn("all", t("filter.all"))}
+        {typeBtn("text", t("filter.text"))}
+        {typeBtn("image", t("filter.image"))}
+      </div>
+
+      <div className="list" ref={listRef}>
+        {shown.length === 0 && (
           <div className="muted list-msg">{query ? t("list.noResults") : t("list.empty")}</div>
         )}
-        {items.map((item) => (
-          <div key={item.id} className={`clip-item ${item.pinned ? "pinned" : ""}`}>
+        {shown.map((item, i) => (
+          <div
+            key={item.id}
+            data-idx={i}
+            className={`clip-item ${item.pinned ? "pinned" : ""} ${i === selClamped ? "selected" : ""}`}
+          >
             <button
               className="clip-body"
               title={t("item.copy")}
-              onClick={() => void copy(item)}
+              onClick={() => {
+                setSel(i);
+                void copy(item);
+              }}
             >
               {item.kind === "image" ? (
                 <img className="clip-img" src={item.content} alt={t("item.image")} />
@@ -124,12 +190,7 @@ export default function App() {
               >
                 {item.pinned ? "📌" : "📍"}
               </button>
-              <button
-                title={t("item.delete")}
-                onClick={() => {
-                  void invoke("delete_item", { id: item.id }).then(() => reload(query));
-                }}
-              >
+              <button title={t("item.delete")} onClick={() => remove(item.id)}>
                 ×
               </button>
             </div>

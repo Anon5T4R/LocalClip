@@ -20,6 +20,9 @@ const LOCALE_KEY = "localclip.locale";
 
 const pt = {
   "top.search": "Buscar no histórico…",
+  "filter.all": "Tudo",
+  "filter.text": "Texto",
+  "filter.image": "Imagens",
   "top.clear": "Limpar histórico",
   "top.clearConfirm": "Limpar o histórico? (fixados ficam)",
   "top.settingsTitle": "Configurações",
@@ -61,6 +64,9 @@ export type MessageKey = keyof typeof pt;
 
 const en: Record<MessageKey, string> = {
   "top.search": "Search history…",
+  "filter.all": "All",
+  "filter.text": "Text",
+  "filter.image": "Images",
   "top.clear": "Clear history",
   "top.clearConfirm": "Clear the history? (pinned items stay)",
   "top.settingsTitle": "Settings",
@@ -100,6 +106,9 @@ const en: Record<MessageKey, string> = {
 
 const es: Record<MessageKey, string> = {
   "top.search": "Buscar en el historial…",
+  "filter.all": "Todo",
+  "filter.text": "Texto",
+  "filter.image": "Imágenes",
   "top.clear": "Limpiar historial",
   "top.clearConfirm": "¿Limpiar el historial? (los fijados se quedan)",
   "top.settingsTitle": "Configuración",
