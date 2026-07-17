@@ -58,6 +58,8 @@ const pt = {
   "settings.themePunkPrincess": "PunkPrincess",
   "settings.language": "Idioma",
   "settings.retention": "Itens no histórico",
+  "settings.autostart": "Iniciar com o sistema",
+  "settings.closeToTray": "Fechar minimiza pra bandeja",
   "settings.privacy":
     "Privacidade: tudo fica NESTA máquina (SQLite local, retenção de 500 itens; fixados não expiram). Conteúdo marcado como sensível (LocalKeys e gerenciadores de senha usam a flag ExcludeClipboardContentFromMonitorProcessing) NÃO é capturado.",
   "settings.shortcut": "Atalho global: Ctrl+Shift+V mostra/esconde o popup.",
@@ -107,6 +109,8 @@ const en: Record<MessageKey, string> = {
   "settings.themePunkPrincess": "PunkPrincess",
   "settings.language": "Language",
   "settings.retention": "Items in history",
+  "settings.autostart": "Start with the system",
+  "settings.closeToTray": "Closing minimizes to tray",
   "settings.privacy":
     "Privacy: everything stays on THIS machine (local SQLite, 500-item retention; pinned items never expire). Content flagged as sensitive (LocalKeys and password managers use the ExcludeClipboardContentFromMonitorProcessing flag) is NOT captured.",
   "settings.shortcut": "Global shortcut: Ctrl+Shift+V shows/hides the popup.",
@@ -154,6 +158,8 @@ const es: Record<MessageKey, string> = {
   "settings.themePunkPrincess": "PunkPrincess",
   "settings.language": "Idioma",
   "settings.retention": "Elementos en el historial",
+  "settings.autostart": "Iniciar con el sistema",
+  "settings.closeToTray": "Cerrar minimiza a la bandeja",
   "settings.privacy":
     "Privacidad: todo se queda en ESTA máquina (SQLite local, retención de 500 elementos; los fijados no caducan). El contenido marcado como sensible (LocalKeys y los gestores de contraseñas usan la bandera ExcludeClipboardContentFromMonitorProcessing) NO se captura.",
   "settings.shortcut": "Atajo global: Ctrl+Shift+V muestra/oculta el popup.",

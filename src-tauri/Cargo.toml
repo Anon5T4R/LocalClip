@@ -1,6 +1,6 @@
 [package]
 name = "localclip"
-version = "0.4.0"
+version = "0.5.0"
 description = "LocalClip — histórico de área de transferência 100% local"
 authors = ["Taylor"]
 edition = "2021"
@@ -17,7 +17,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# tray-icon + image-png: fechar a janela pode minimizar pra bandeja (opt-in em
+# Configurações); o poller segue vivo capturando o clipboard em segundo plano.
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -31,8 +33,17 @@ base64 = "0.22"
 tauri-plugin-single-instance = "2"
 # Popup por atalho global (Ctrl+Shift+V).
 tauri-plugin-global-shortcut = "2"
+# Autostart opcional (opt-in em Configurações): abrir com o Windows pra o
+# histórico capturar desde o logon, direto na bandeja.
+tauri-plugin-autostart = "2"
 
 [target.'cfg(windows)'.dependencies]
 # Checa a flag ExcludeClipboardContentFromMonitorProcessing (LocalKeys marca;
 # gerenciador de clipboard DECENTE não captura senha).
 clipboard-win = "5"
+# Lê a chave Run na mão pra decidir se o autostart precisa ser reimposto: o
+# `is_enabled()` do plugin só checa se a entrada existe, sem comparar o caminho
+# (então não enxerga uma entrada obsoleta), e não distingue "apagada" de
+# "desligada pelo Gerenciador de Tarefas" — que devem ter respostas opostas.
+# Mesma versão que o auto-launch já usa: não entra crate nova na árvore.
+winreg = "0.55"

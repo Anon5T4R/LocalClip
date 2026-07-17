@@ -15,7 +15,10 @@ use std::time::Duration;
 use base64::Engine;
 use rusqlite::Connection;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 pub struct Db(Mutex<Option<Connection>>);
@@ -128,6 +131,169 @@ fn insert_item(
     )
     .map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+// ---------- settings (tabela meta) ----------
+
+/// Lê um booleano da `meta`. `None` = a chave nunca foi gravada (instalação
+/// antiga ou primeira execução) — quem chama decide o default.
+fn setting_bool_opt(conn: &Connection, key: &str) -> Option<bool> {
+    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| {
+        r.get::<_, String>(0)
+    })
+    .ok()
+    .map(|s| s == "1" || s == "true")
+}
+
+fn set_setting_bool(conn: &Connection, key: &str, value: bool) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        rusqlite::params![key, if value { "1" } else { "0" }],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ---------- autostart (abrir com o Windows, direto na bandeja) ----------
+//
+// A intenção do usuário mora no banco (`meta.autostart`), NÃO no registro do
+// Windows. O registro é só o efeito — e um efeito que se perde sozinho: o
+// `is_enabled()` do plugin só checa se a entrada em `...\CurrentVersion\Run`
+// EXISTE, nunca se ela aponta pro exe atual. Se a entrada some (instalador/
+// limpador) ou envelhece (o caminho do exe muda), o app pararia de subir no
+// logon com a checkbox ainda marcada. Com a intenção no banco,
+// `reconcile_autostart` (no setup) reimpõe o registro a cada boot.
+// (Padrão da suíte; receita original no LocalAgenda.)
+
+/// Estado desejado pelo usuário. `None` = nunca decidiu (instalação antiga):
+/// herda o que já está no SO pra não ligar/desligar nada por conta própria.
+fn autostart_intent(app: &AppHandle) -> bool {
+    with_conn(app, |c| Ok(setting_bool_opt(c, "autostart")))
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| app.autolaunch().is_enabled().unwrap_or(false))
+}
+
+/// O que o SO tem hoje, do ponto de vista de "precisa consertar?".
+#[derive(Debug, PartialEq)]
+enum OsAutostart {
+    /// Entrada presente e apontando pro exe atual — nada a fazer.
+    Ok,
+    /// Ausente ou apontando pro caminho errado (instalação antiga/movida) —
+    /// é o caso a reimpor.
+    Broken,
+    /// O usuário desligou pelo Gerenciador de Tarefas do Windows. É uma escolha
+    /// explícita dele, na UI oficial do SO: obedecemos e desmarcamos a checkbox.
+    UserDisabled,
+}
+
+/// Espelha o formato que o `auto-launch` grava: `"<exe> <args>"`, sem aspas.
+#[cfg(windows)]
+fn os_autostart(app: &AppHandle) -> OsAutostart {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
+    use winreg::RegKey;
+
+    const RUN: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+    const APPROVED: &str =
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+    let name = &app.package_info().name;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    // Override do Gerenciador de Tarefas: 12 bytes = flag (DWORD) + FILETIME de
+    // quando foi desligado. No flag, o bit 0 ligado = desabilitado (2/6 ligado,
+    // 3/7 desligado); quando habilitado, o timestamp fica zerado. Checamos os
+    // dois: o auto-launch só olha o timestamp, o que não enxerga um flag
+    // desligado com timestamp zerado.
+    let approved_off = hkcu
+        .open_subkey_with_flags(APPROVED, KEY_READ)
+        .ok()
+        .and_then(|k| k.get_raw_value(name).ok())
+        .map(|v| {
+            let b = &v.bytes;
+            let flag_off = b.first().map(|f| f & 1 != 0).unwrap_or(false);
+            let stamped_off = b.len() >= 12 && !b[4..12].iter().all(|x| *x == 0);
+            flag_off || stamped_off
+        })
+        .unwrap_or(false);
+    if approved_off {
+        return OsAutostart::UserDisabled;
+    }
+
+    let current = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_default();
+    let expected = format!("{current} --hidden");
+
+    match hkcu
+        .open_subkey_with_flags(RUN, KEY_READ)
+        .ok()
+        .and_then(|k| k.get_value::<String, _>(name).ok())
+    {
+        Some(v) if v.trim().eq_ignore_ascii_case(expected.trim()) => OsAutostart::Ok,
+        _ => OsAutostart::Broken,
+    }
+}
+
+/// Fora do Windows não há registro pra envelhecer: o `is_enabled()` basta.
+#[cfg(not(windows))]
+fn os_autostart(app: &AppHandle) -> OsAutostart {
+    if app.autolaunch().is_enabled().unwrap_or(false) {
+        OsAutostart::Ok
+    } else {
+        OsAutostart::Broken
+    }
+}
+
+/// Alinha o SO com a intenção guardada, a cada boot. É isso que conserta a
+/// entrada apagada por um instalador ou apontando pro caminho antigo — sem isso
+/// o app pararia de subir no logon, calado, com a checkbox marcada.
+fn reconcile_autostart(app: &AppHandle) {
+    let mut want = autostart_intent(app);
+    let state = os_autostart(app);
+
+    // O Gerenciador de Tarefas vence a checkbox: o usuário mandou desligar por
+    // lá, então a intenção passa a ser essa (senão reimporíamos todo boot,
+    // brigando com ele).
+    if want && state == OsAutostart::UserDisabled {
+        want = false;
+    }
+    let _ = with_conn(app, |c| set_setting_bool(c, "autostart", want));
+
+    let mgr = app.autolaunch();
+    let res = match (want, &state) {
+        (true, OsAutostart::Broken) => mgr.enable(),
+        (false, OsAutostart::Ok) => mgr.disable(),
+        _ => Ok(()),
+    };
+    if let Err(e) = res {
+        eprintln!("[localclip] falha ao reconciliar o autostart (want={want}, so={state:?}): {e}");
+    }
+}
+
+// ---------- bandeja ----------
+
+/// Traz a janela de volta da bandeja.
+fn open_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+/// Clique no ícone da bandeja: mostra se escondida, esconde se visível.
+fn toggle_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+        } else {
+            let _ = w.show();
+            let _ = w.unminimize();
+            let _ = w.set_focus();
+        }
+    }
 }
 
 // ---------- poller ----------
@@ -313,6 +479,36 @@ fn set_retention(app: AppHandle, value: i64) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command(async)]
+fn autostart_get(app: AppHandle) -> Result<bool, String> {
+    Ok(autostart_intent(&app))
+}
+
+#[tauri::command(async)]
+fn autostart_set(app: AppHandle, enabled: bool) -> Result<(), String> {
+    // A intenção primeiro: se o registro falhar, o reconcile do próximo boot
+    // ainda tenta de novo em vez de esquecer o que o usuário pediu.
+    with_conn(&app, |c| set_setting_bool(c, "autostart", enabled))?;
+    let mgr = app.autolaunch();
+    if enabled {
+        // NUNCA disable().and_then(enable): disable() erra quando não há entrada.
+        let _ = mgr.disable();
+        mgr.enable().map_err(|e| e.to_string())
+    } else {
+        mgr.disable().map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command(async)]
+fn close_to_tray_get(app: AppHandle) -> Result<bool, String> {
+    with_conn(&app, |c| Ok(setting_bool_opt(c, "closeToTray").unwrap_or(false)))
+}
+
+#[tauri::command(async)]
+fn close_to_tray_set(app: AppHandle, enabled: bool) -> Result<(), String> {
+    with_conn(&app, |c| set_setting_bool(c, "closeToTray", enabled))
+}
+
 /// Limpa o histórico (fixados ficam).
 #[tauri::command(async)]
 fn clear_all(app: AppHandle) -> Result<(), String> {
@@ -329,12 +525,20 @@ pub fn run() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         builder = builder
-            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.show();
-                    let _ = win.set_focus();
+            .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+                // Um 2º launch com "--hidden" é o logon batendo num app que já
+                // está vivo: não estoura a janela na cara do usuário.
+                if !args.iter().any(|a| a == "--hidden") {
+                    open_main(app);
                 }
             }))
+            // Autostart: quando ligado, o app entra no logon com "--hidden" pra
+            // abrir direto na bandeja (segundo plano), capturando o clipboard
+            // sem estourar a janela.
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                Some(vec!["--hidden"]),
+            ))
             .plugin(
                 // Popup por atalho global: Ctrl+Shift+V mostra/foca a janela.
                 tauri_plugin_global_shortcut::Builder::new()
@@ -368,6 +572,74 @@ pub fn run() {
             let conn = open_db(&dir.join("localclip.db")).map_err(std::io::Error::other)?;
             *app.state::<Db>().0.lock().unwrap() = Some(conn);
 
+            // Bandeja: sempre presente. Clique esquerdo alterna mostrar/esconder;
+            // menu com "Mostrar/Ocultar" e "Sair" ("Sair" SEMPRE fecha de verdade).
+            let show = MenuItem::with_id(app, "toggle", "Mostrar/Ocultar", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let _tray = TrayIconBuilder::with_id("main")
+                .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("LocalClip")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "toggle" => toggle_main(app),
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        toggle_main(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+
+            // "Fechar minimiza pra bandeja" (opt-in em Configurações, default
+            // desligado): CloseRequested vira hide em vez de sair.
+            if let Some(win) = app.get_webview_window("main") {
+                let w = win.clone();
+                let handle = app.handle().clone();
+                win.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        let to_tray = with_conn(&handle, |c| {
+                            Ok(setting_bool_opt(c, "closeToTray").unwrap_or(false))
+                        })
+                        .unwrap_or(false);
+                        if to_tray {
+                            api.prevent_close();
+                            let _ = w.hide();
+                        }
+                    }
+                });
+            }
+
+            // Reimpõe o autostart conforme a intenção guardada (conserta entrada
+            // apagada ou apontando pro caminho antigo). Fora da thread principal:
+            // mexe no registro e não deve segurar a abertura da janela.
+            let auto_handle = app.handle().clone();
+            std::thread::spawn(move || reconcile_autostart(&auto_handle));
+
+            // Início no logon com "--hidden": se "fechar minimiza pra bandeja"
+            // está ligado, esconde a janela e fica só na bandeja capturando o
+            // clipboard. Com a opção desligada, a janela abre normal (senão o
+            // usuário fecharia no X e o app morreria escondido sem servir).
+            if std::env::args().any(|a| a == "--hidden") {
+                let hide = with_conn(app.handle(), |c| {
+                    Ok(setting_bool_opt(c, "closeToTray").unwrap_or(false))
+                })
+                .unwrap_or(false);
+                if hide {
+                    if let Some(win) = app.get_webview_window("main") {
+                        let _ = win.hide();
+                    }
+                }
+            }
+
             // Poller do clipboard (thread; 800 ms é imperceptível e barato).
             let handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -387,6 +659,10 @@ pub fn run() {
             clear_all,
             get_retention,
             set_retention,
+            autostart_get,
+            autostart_set,
+            close_to_tray_get,
+            close_to_tray_set,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
