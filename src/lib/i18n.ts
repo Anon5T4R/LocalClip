@@ -35,6 +35,15 @@ const pt = {
   "item.delete": "Excluir",
   "item.image": "Imagem",
 
+  // Transformações: o histórico NÃO muda, só a cópia. O "hint" explica isso.
+  "tf.hint": "Copiar transformado (o item guardado não muda)",
+  "tf.upper": "MAIÚSCULAS",
+  "tf.lower": "minúsculas",
+  "tf.title": "Capitalizado",
+  "tf.trim": "Remover espaços das pontas",
+  "tf.joinLines": "Juntar linhas",
+  "tf.squish": "Colapsar espaços",
+
   "toast.copied": "Copiado — Ctrl+V onde quiser",
   "toast.copyFailed": "Não consegui copiar: {error}",
   "toast.cleared": "Histórico limpo",
@@ -86,6 +95,14 @@ const en: Record<MessageKey, string> = {
   "item.delete": "Delete",
   "item.image": "Image",
 
+  "tf.hint": "Copy transformed (the stored item stays as is)",
+  "tf.upper": "UPPERCASE",
+  "tf.lower": "lowercase",
+  "tf.title": "Title Case",
+  "tf.trim": "Trim surrounding spaces",
+  "tf.joinLines": "Join lines",
+  "tf.squish": "Collapse whitespace",
+
   "toast.copied": "Copied — Ctrl+V anywhere",
   "toast.copyFailed": "Couldn't copy: {error}",
   "toast.cleared": "History cleared",
@@ -134,6 +151,14 @@ const es: Record<MessageKey, string> = {
   "item.unpin": "Desfijar",
   "item.delete": "Eliminar",
   "item.image": "Imagen",
+
+  "tf.hint": "Copiar transformado (el elemento guardado no cambia)",
+  "tf.upper": "MAYÚSCULAS",
+  "tf.lower": "minúsculas",
+  "tf.title": "Capitalizado",
+  "tf.trim": "Quitar espacios de los extremos",
+  "tf.joinLines": "Unir líneas",
+  "tf.squish": "Colapsar espacios",
 
   "toast.copied": "Copiado — Ctrl+V donde quieras",
   "toast.copyFailed": "No se pudo copiar: {error}",

@@ -229,8 +229,12 @@ input {
   padding: 32px 16px;
   line-height: 1.5;
 }
+/* flex-wrap: a barra de transformações é um terceiro filho de largura 100%,
+   então ela QUEBRA pra própria linha abaixo do corpo + ações (sem precisar de
+   um wrapper novo em volta do corpo). */
 .clip-item {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   align-items: stretch;
   background: var(--panel);
@@ -315,6 +319,24 @@ input {
 .clip-actions button:hover {
   color: var(--text);
   background: var(--panel-2);
+}
+
+/* Barra de transformações do item selecionado. Reusa o .chip do filtro de tipo
+   (mesma linguagem visual: ação leve, não-destrutiva) e senta sobre o
+   --panel-2 pra ler como faixa anexa ao item, não como item separado. */
+.clip-transforms {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--panel-2);
+  border-top: 1px solid var(--border);
+}
+.clip-transforms .chip {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  min-width: 34px;
+  padding: 2px 9px;
 }
 
 /* ---------- modal / toasts / util ---------- */

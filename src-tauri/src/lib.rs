@@ -434,6 +434,23 @@ fn copy_item(app: AppHandle, id: i64) -> Result<(), String> {
     Ok(())
 }
 
+/// Manda texto ARBITRÁRIO pro clipboard sem encostar no banco.
+///
+/// Serve às transformações rápidas (MAIÚSCULAS, trim, …): o que vai pro
+/// clipboard é o texto transformado, mas o item guardado continua exatamente
+/// como o usuário copiou — por isso aqui NÃO tem INSERT nem o UPDATE de
+/// created_ms que o `copy_item` faz. Não dá pra reaproveitar o `copy_item`
+/// justamente por causa desse UPDATE.
+///
+/// O SKIP_NEXT é o que impede o texto transformado de voltar como item novo
+/// pelo poller — sem ele, cada clique em "MAIÚSCULAS" poluiria o histórico com
+/// uma variante do que já está lá.
+#[tauri::command(async)]
+fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
+    SKIP_NEXT.store(true, Ordering::Relaxed);
+    app.clipboard().write_text(text).map_err(|e| e.to_string())
+}
+
 #[tauri::command(async)]
 fn delete_item(app: AppHandle, id: i64) -> Result<(), String> {
     with_conn(&app, |conn| {
@@ -654,6 +671,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_items,
             copy_item,
+            copy_text,
             delete_item,
             toggle_pin,
             clear_all,

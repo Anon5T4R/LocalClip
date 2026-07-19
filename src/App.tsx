@@ -4,7 +4,8 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import SettingsModal from "./components/SettingsModal";
 import Toasts from "./components/Toasts";
-import { localeTag, t } from "./lib/i18n";
+import { localeTag, t, type MessageKey } from "./lib/i18n";
+import { TRANSFORMS } from "./lib/transform";
 import { formatWhen, textPreview } from "./lib/util";
 import { useUi } from "./state/ui";
 
@@ -69,6 +70,20 @@ export default function App() {
       await invoke("copy_item", { id: item.id });
       await reload(query);
       // Esconde a janela: devolve o foco pro app anterior (é só apertar Ctrl+V).
+      if (isTauri) void getCurrentWindow().hide().catch(() => {});
+    } catch (e) {
+      pushToast("error", t("toast.copyFailed", { error: String(e) }));
+    }
+  };
+
+  // Copia o texto TRANSFORMADO sem tocar no histórico: vai pro comando
+  // `copy_text` (clipboard puro, zero SQL) em vez do `copy_item` (que faz
+  // UPDATE de created_ms pra subir o item). O item guardado é dado do usuário —
+  // transformar é sobre a cópia de agora, não sobre reescrever o que ele salvou.
+  // Sem reload() depois: nada mudou no banco, recarregar só piscaria a lista.
+  const copyTransformed = async (item: ItemRow, apply: (s: string) => string) => {
+    try {
+      await invoke("copy_text", { text: apply(item.content) });
       if (isTauri) void getCurrentWindow().hide().catch(() => {});
     } catch (e) {
       pushToast("error", t("toast.copyFailed", { error: String(e) }));
@@ -194,6 +209,25 @@ export default function App() {
                 ×
               </button>
             </div>
+            {/* Barra de transformações: só no item SELECIONADO e só em texto.
+                Mostrar em todos os itens encheria a lista de 6 botões por linha
+                num popup estreito; a seleção já é o "foco" do app (↑/↓ + Enter),
+                então ela é o lugar natural pra ação secundária. Imagem não tem
+                texto pra transformar — a barra nem existe nela. */}
+            {i === selClamped && item.kind === "text" && (
+              <div className="clip-transforms">
+                {TRANSFORMS.map((tr) => (
+                  <button
+                    key={tr.id}
+                    className="chip"
+                    title={`${t(`tf.${tr.id}` as MessageKey)} — ${t("tf.hint")}`}
+                    onClick={() => void copyTransformed(item, tr.apply)}
+                  >
+                    {tr.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
