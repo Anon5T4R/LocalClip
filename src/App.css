@@ -389,6 +389,46 @@ input {
   gap: 12px;
   padding: 8px 0;
 }
+/* Linhas com explicação embaixo do rótulo: o texto quebra em várias linhas,
+   então alinhar pelo topo (senão o botão flutua no meio do parágrafo). */
+.settings-row:has(.settings-hint) {
+  align-items: flex-start;
+}
+.settings-section {
+  font-size: 13px;
+  margin: 18px 0 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.settings-hint {
+  display: block;
+  margin-top: 3px;
+  max-width: 44ch;
+  line-height: 1.45;
+}
+/* O caminho é longo e não pode empurrar o modal: encolhe com reticências. */
+.storage-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.storage-path code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  direction: rtl; /* corta o começo, preserva o fim (o nome da pasta) */
+  text-align: left;
+}
+.storage-path button {
+  flex: none;
+}
+.storage-old {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
 .toasts {
   position: fixed;
   bottom: 14px;

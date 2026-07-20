@@ -54,6 +54,30 @@ const pt = {
 
   "dlg.ok": "OK",
   "dlg.cancel": "Cancelar",
+  "dlg.clear": "Limpar",
+  "dlg.delete": "Apagar",
+  "dlg.confirm": "Confirmar",
+
+  // Dados e armazenamento
+  "settings.storage": "Dados e armazenamento",
+  "settings.storagePath": "Pasta de dados",
+  "settings.storageOpen": "Abrir pasta",
+  "settings.storageSize": "Tamanho do banco",
+  "settings.storageCounts":
+    "{n} itens ({pinned} fixados, {images} imagens ocupando {imgSize})",
+  "settings.clearImages": "Apagar as imagens",
+  "settings.clearImagesHint":
+    "As imagens são o que engorda o histórico — cada print vira um PNG inteiro dentro do banco. Some só com as imagens NÃO fixadas: todo texto fica, e imagem fixada também.",
+  "settings.clearImagesConfirm":
+    "Apagar {n} imagens do histórico? Os textos ficam, e as imagens fixadas também.",
+  "settings.deleteOld": "Apagar itens antigos",
+  "settings.deleteOldHint":
+    "Apaga itens mais velhos que o prazo escolhido. Itens fixados NUNCA são apagados, por mais antigos que sejam.",
+  "settings.deleteOldConfirm":
+    "Apagar os itens com mais de {days} dias? Os fixados ficam, mesmo os antigos.",
+  "settings.days": "{n} dias",
+  "toast.cleaned": "{n} itens apagados",
+  "toast.storageFailed": "Falha: {error}",
 
   "settings.title": "Configurações",
   "settings.theme": "Tema",
@@ -113,6 +137,28 @@ const en: Record<MessageKey, string> = {
 
   "dlg.ok": "OK",
   "dlg.cancel": "Cancel",
+  "dlg.clear": "Clear",
+  "dlg.delete": "Delete",
+  "dlg.confirm": "Confirm",
+
+  "settings.storage": "Data & storage",
+  "settings.storagePath": "Data folder",
+  "settings.storageOpen": "Open folder",
+  "settings.storageSize": "Database size",
+  "settings.storageCounts": "{n} items ({pinned} pinned, {images} images taking {imgSize})",
+  "settings.clearImages": "Delete the images",
+  "settings.clearImagesHint":
+    "Images are what makes the history heavy — every screenshot becomes a whole PNG inside the database. Only NON-pinned images go: all text stays, and pinned images stay too.",
+  "settings.clearImagesConfirm":
+    "Delete {n} images from the history? The texts stay, and so do the pinned images.",
+  "settings.deleteOld": "Delete old items",
+  "settings.deleteOldHint":
+    "Deletes items older than the chosen period. Pinned items are NEVER deleted, however old they are.",
+  "settings.deleteOldConfirm":
+    "Delete items older than {days} days? Pinned ones stay, even the old ones.",
+  "settings.days": "{n} days",
+  "toast.cleaned": "{n} items deleted",
+  "toast.storageFailed": "Failed: {error}",
 
   "settings.title": "Settings",
   "settings.theme": "Theme",
@@ -170,6 +216,28 @@ const es: Record<MessageKey, string> = {
 
   "dlg.ok": "OK",
   "dlg.cancel": "Cancelar",
+  "dlg.clear": "Limpiar",
+  "dlg.delete": "Eliminar",
+  "dlg.confirm": "Confirmar",
+
+  "settings.storage": "Datos y almacenamiento",
+  "settings.storagePath": "Carpeta de datos",
+  "settings.storageOpen": "Abrir carpeta",
+  "settings.storageSize": "Tamaño de la base",
+  "settings.storageCounts": "{n} elementos ({pinned} fijados, {images} imágenes ocupando {imgSize})",
+  "settings.clearImages": "Eliminar las imágenes",
+  "settings.clearImagesHint":
+    "Las imágenes son lo que engorda el historial — cada captura se guarda como un PNG entero dentro de la base. Solo se van las imágenes NO fijadas: todo el texto se conserva, y las imágenes fijadas también.",
+  "settings.clearImagesConfirm":
+    "¿Eliminar {n} imágenes del historial? Los textos se conservan, y las imágenes fijadas también.",
+  "settings.deleteOld": "Eliminar elementos antiguos",
+  "settings.deleteOldHint":
+    "Elimina elementos más viejos que el plazo elegido. Los elementos fijados NUNCA se eliminan, por antiguos que sean.",
+  "settings.deleteOldConfirm":
+    "¿Eliminar los elementos con más de {days} días? Los fijados se conservan, incluso los antiguos.",
+  "settings.days": "{n} días",
+  "toast.cleaned": "{n} elementos eliminados",
+  "toast.storageFailed": "Error: {error}",
 
   "settings.title": "Configuración",
   "settings.theme": "Tema",

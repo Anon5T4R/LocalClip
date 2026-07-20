@@ -18,3 +18,21 @@ export function textPreview(text: string, max = 200): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
 }
+
+/**
+ * Tamanho legível. Base 1024 com rótulo KB/MB/GB porque é o que o Explorer do
+ * Windows mostra — bater com o número que o usuário vê na pasta importa mais
+ * aqui do que a pureza do KiB.
+ */
+export function fmtBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  // Uma casa decimal só a partir de MB: "1,5 KB" é ruído, "1,5 GB" informa.
+  return `${i >= 2 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+}

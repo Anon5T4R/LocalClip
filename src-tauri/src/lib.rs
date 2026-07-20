@@ -531,8 +531,120 @@ fn close_to_tray_set(app: AppHandle, enabled: bool) -> Result<(), String> {
 fn clear_all(app: AppHandle) -> Result<(), String> {
     with_conn(&app, |conn| {
         conn.execute("DELETE FROM items WHERE pinned = 0", []).map_err(|e| e.to_string())?;
-        Ok(())
+        vacuum(conn)
     })
+}
+
+// ---------- dados e armazenamento ----------
+//
+// O que o painel existe pra resolver: o histórico guarda PNG inteiro dentro da
+// linha (coluna `image`), e a retenção conta ITENS, não bytes. Quinhentas
+// capturas de tela cabem folgado no teto de 500 itens e viram centenas de MB
+// sem que nada na UI dê um pio. Aqui o usuário vê o tamanho e escolhe o que
+// soltar — sempre preservando o que ele FIXOU, que é o equivalente ao favorito
+// do LocalFeed.
+
+/// Sem `VACUUM` o arquivo não encolhe depois do DELETE (o SQLite só marca as
+/// páginas como livres), e o painel mostraria o mesmo tamanho de antes — ou
+/// seja, o botão pareceria não ter funcionado.
+fn vacuum(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch("VACUUM").map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct StorageCounts {
+    items: i64,
+    /// Fixados — NUNCA são apagados por nenhuma limpeza daqui.
+    pinned: i64,
+    images: i64,
+    /// Soma dos PNG guardados nas linhas. É quase sempre o grosso do banco.
+    image_bytes: i64,
+}
+
+fn storage_counts(conn: &Connection) -> Result<StorageCounts, String> {
+    conn.query_row(
+        "SELECT COUNT(*),
+                COALESCE(SUM(pinned), 0),
+                COALESCE(SUM(kind = 'image'), 0),
+                COALESCE(SUM(LENGTH(image)), 0)
+         FROM items",
+        [],
+        |r| {
+            Ok(StorageCounts {
+                items: r.get(0)?,
+                pinned: r.get(1)?,
+                images: r.get(2)?,
+                image_bytes: r.get(3)?,
+            })
+        },
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct StorageInfo {
+    dir: String,
+    /// db + WAL + SHM: o WAL sozinho pode passar do banco depois de uma rajada.
+    db_bytes: u64,
+    items: i64,
+    pinned: i64,
+    images: i64,
+    image_bytes: i64,
+}
+
+#[tauri::command(async)]
+fn storage_info(app: AppHandle) -> Result<StorageInfo, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db_bytes = ["localclip.db", "localclip.db-wal", "localclip.db-shm"]
+        .iter()
+        .filter_map(|n| std::fs::metadata(dir.join(n)).ok())
+        .map(|m| m.len())
+        .sum();
+    let c = with_conn(&app, storage_counts)?;
+    Ok(StorageInfo {
+        dir: dir.to_string_lossy().into_owned(),
+        db_bytes,
+        items: c.items,
+        pinned: c.pinned,
+        images: c.images,
+        image_bytes: c.image_bytes,
+    })
+}
+
+/// Apaga só as imagens não fixadas. É o botão que devolve mais espaço por
+/// clique, e o único que o usuário pode apertar sem perder texto nenhum.
+fn clear_images(conn: &Connection) -> Result<u64, String> {
+    let n = conn
+        .execute("DELETE FROM items WHERE kind = 'image' AND pinned = 0", [])
+        .map_err(|e| e.to_string())?;
+    vacuum(conn)?;
+    Ok(n as u64)
+}
+
+#[tauri::command(async)]
+fn clear_images_cmd(app: AppHandle) -> Result<u64, String> {
+    let n = with_conn(&app, clear_images)?;
+    let _ = app.emit("clip-changed", ());
+    Ok(n)
+}
+
+/// Apaga itens não fixados mais velhos que `cutoff_ms`.
+fn clear_older_than(conn: &Connection, cutoff_ms: i64) -> Result<u64, String> {
+    let n = conn
+        .execute("DELETE FROM items WHERE pinned = 0 AND created_ms < ?1", [cutoff_ms])
+        .map_err(|e| e.to_string())?;
+    vacuum(conn)?;
+    Ok(n as u64)
+}
+
+#[tauri::command(async)]
+fn clear_old_items(app: AppHandle, days: u32) -> Result<u64, String> {
+    let cutoff = now_ms() - i64::from(days) * 86_400_000;
+    let n = with_conn(&app, |c| clear_older_than(c, cutoff))?;
+    let _ = app.emit("clip-changed", ());
+    Ok(n)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -582,6 +694,7 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(Db(Mutex::new(None)))
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
@@ -681,6 +794,9 @@ pub fn run() {
             autostart_set,
             close_to_tray_get,
             close_to_tray_set,
+            storage_info,
+            clear_images_cmd,
+            clear_old_items,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -713,5 +829,131 @@ mod tests {
         assert_eq!(hash_of("text", b"a"), hash_of("text", b"a"));
         assert_ne!(hash_of("text", b"a"), hash_of("text", b"b"));
         assert_ne!(hash_of("text", b"a"), hash_of("image", b"a"));
+    }
+
+    // ---------- dados e armazenamento ----------
+    //
+    // A regra que estes testes existem pra defender: NENHUMA limpeza do painel
+    // encosta em item fixado. Não basta conferir que o que era pra sumir sumiu —
+    // o que importa é quem FICOU.
+
+    /// Banco com os 4 casos que se cruzam: texto/imagem × fixado/solto.
+    fn conn_com_mistura() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE items (
+               id INTEGER PRIMARY KEY, kind TEXT NOT NULL, content TEXT, image BLOB,
+               hash TEXT NOT NULL UNIQUE, pinned INTEGER NOT NULL DEFAULT 0,
+               created_ms INTEGER NOT NULL);",
+        )
+        .unwrap();
+        let agora = now_ms();
+        let antigo = agora - 30 * 86_400_000; // 30 dias atrás
+        let linhas: [(&str, Option<&str>, Option<&[u8]>, i64, i64); 6] = [
+            ("text", Some("texto solto novo"), None, 0, agora),
+            ("text", Some("texto FIXADO novo"), None, 1, agora),
+            ("text", Some("texto solto ANTIGO"), None, 0, antigo),
+            ("text", Some("texto FIXADO antigo"), None, 1, antigo),
+            ("image", None, Some(&[1, 2, 3, 4][..]), 0, agora),
+            ("image", None, Some(&[5, 6, 7, 8, 9][..]), 1, agora),
+        ];
+        for (i, (kind, content, image, pinned, created)) in linhas.iter().enumerate() {
+            conn.execute(
+                "INSERT INTO items (kind, content, image, hash, pinned, created_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![kind, content, image, format!("h{i}"), pinned, created],
+            )
+            .unwrap();
+        }
+        conn
+    }
+
+    fn textos(conn: &Connection) -> Vec<String> {
+        let mut st = conn.prepare("SELECT COALESCE(content, kind) FROM items ORDER BY id").unwrap();
+        let v: Vec<String> = st.query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect();
+        v
+    }
+
+    #[test]
+    fn contagens_batem_com_o_conteudo() {
+        let conn = conn_com_mistura();
+        let c = storage_counts(&conn).unwrap();
+        assert_eq!(c.items, 6);
+        assert_eq!(c.pinned, 3);
+        assert_eq!(c.images, 2);
+        // 4 + 5 bytes de PNG — é este número que explica um banco gordo.
+        assert_eq!(c.image_bytes, 9);
+    }
+
+    #[test]
+    fn contagens_em_banco_vazio_sao_zero_e_nao_erro() {
+        // COALESCE: SUM de tabela vazia devolve NULL, que estouraria no get().
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE items (
+               id INTEGER PRIMARY KEY, kind TEXT NOT NULL, content TEXT, image BLOB,
+               hash TEXT NOT NULL UNIQUE, pinned INTEGER NOT NULL DEFAULT 0,
+               created_ms INTEGER NOT NULL);",
+        )
+        .unwrap();
+        let c = storage_counts(&conn).unwrap();
+        assert_eq!((c.items, c.pinned, c.images, c.image_bytes), (0, 0, 0, 0));
+    }
+
+    #[test]
+    fn limpar_imagens_preserva_todo_texto_e_a_imagem_fixada() {
+        let conn = conn_com_mistura();
+        let n = clear_images(&conn).unwrap();
+        assert_eq!(n, 1, "só a imagem SOLTA sai");
+
+        let ficaram = textos(&conn);
+        assert_eq!(ficaram.len(), 5);
+        // Nenhum texto foi tocado — nem o solto.
+        assert!(ficaram.contains(&"texto solto novo".to_string()));
+        assert!(ficaram.contains(&"texto FIXADO novo".to_string()));
+        assert!(ficaram.contains(&"texto solto ANTIGO".to_string()));
+        assert!(ficaram.contains(&"texto FIXADO antigo".to_string()));
+        // A imagem fixada sobreviveu.
+        let c = storage_counts(&conn).unwrap();
+        assert_eq!(c.images, 1);
+        assert_eq!(c.image_bytes, 5, "sobrou exatamente o PNG que estava fixado");
+    }
+
+    #[test]
+    fn limpar_antigos_preserva_os_fixados_por_mais_velhos_que_sejam() {
+        let conn = conn_com_mistura();
+        let cutoff = now_ms() - 7 * 86_400_000; // "mais de 7 dias"
+        let n = clear_older_than(&conn, cutoff).unwrap();
+        assert_eq!(n, 1, "só o texto solto e antigo sai");
+
+        let ficaram = textos(&conn);
+        // ESTE é o ponto: antigo E fixado continua aqui.
+        assert!(
+            ficaram.contains(&"texto FIXADO antigo".to_string()),
+            "item fixado nunca pode ser apagado por idade"
+        );
+        assert!(!ficaram.contains(&"texto solto ANTIGO".to_string()));
+        assert_eq!(ficaram.len(), 5);
+    }
+
+    #[test]
+    fn limpar_tudo_deixa_exatamente_os_fixados() {
+        let conn = conn_com_mistura();
+        conn.execute("DELETE FROM items WHERE pinned = 0", []).unwrap();
+        let c = storage_counts(&conn).unwrap();
+        assert_eq!(c.items, 3);
+        assert_eq!(c.pinned, 3, "o que sobrou é exatamente o conjunto dos fixados");
+    }
+
+    #[test]
+    fn limpezas_sao_idempotentes() {
+        // Apertar duas vezes não pode explodir nem apagar mais nada.
+        let conn = conn_com_mistura();
+        assert_eq!(clear_images(&conn).unwrap(), 1);
+        assert_eq!(clear_images(&conn).unwrap(), 0);
+        let cutoff = now_ms() - 7 * 86_400_000;
+        assert_eq!(clear_older_than(&conn, cutoff).unwrap(), 1);
+        assert_eq!(clear_older_than(&conn, cutoff).unwrap(), 0);
+        assert_eq!(storage_counts(&conn).unwrap().pinned, 3);
     }
 }

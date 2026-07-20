@@ -1,6 +1,6 @@
 [package]
 name = "localclip"
-version = "0.6.0"
+version = "0.7.0"
 description = "LocalClip — histórico de área de transferência 100% local"
 authors = ["Taylor"]
 edition = "2021"
@@ -21,6 +21,9 @@ tauri-build = { version = "2", features = [] }
 # Configurações); o poller segue vivo capturando o clipboard em segundo plano.
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-clipboard-manager = "2"
+# Botão "abrir pasta" no painel de dados: mostrar o caminho sem poder abri-lo
+# obriga o usuário a copiar e colar no Explorer.
+tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Histórico num SQLite único em app_data (padrão da suíte).
