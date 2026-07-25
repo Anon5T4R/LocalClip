@@ -18,6 +18,12 @@
  * como texto é feio, mas é o único jeito de travar isso sem um navegador — e um
  * teste de unidade que não roda navegador nenhum jamais pegaria o esmagamento.
  */
+// `node:fs` (e o `@types/node` que ele obriga a instalar) e NÃO o `?raw` do
+// Vite, que seria o caminho natural: **sob o vitest, `import css from
+// "x.css?raw"` devolve string VAZIA** — a opção `css` do vitest é `false` por
+// padrão e curto-circuita todo módulo CSS, inclusive na forma `?raw`. Medido: o
+// teste passava a impressão de rodar e comparava contra `""`, ou seja, um guard
+// que nunca acusaria nada. Ler do disco é feio e é o único jeito honesto aqui.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
