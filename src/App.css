@@ -231,9 +231,22 @@ input {
 }
 /* flex-wrap: a barra de transformações é um terceiro filho de largura 100%,
    então ela QUEBRA pra própria linha abaixo do corpo + ações (sem precisar de
-   um wrapper novo em volta do corpo). */
+   um wrapper novo em volta do corpo).
+
+   `flex: none` NÃO é enfeite — é o que faz a lista existir. O `.list` é um flex
+   column com `overflow-y: auto`, e todo item aqui é um flex ITEM dele. Um flex
+   item encolhe por padrão (`flex-shrink: 1`) até o seu "tamanho mínimo
+   automático", que normalmente é o tamanho do CONTEÚDO — e é isso que segurava
+   a altura. Só que `overflow: hidden` (a linha logo abaixo, que existe pro
+   border-radius cortar o hover do corpo) muda esse mínimo pra **zero**: com a
+   lista cheia, o navegador não rola, ele ESMAGA — cada item vira uma faixa de
+   ~3px que corta o texto e mostra só a fatia de cima das imagens. Medido no app:
+   item de 2,9px em vez de 56,2px, e `scrollHeight === clientHeight` (nada a
+   rolar, porque tudo coube depois de esmagado). Com poucos itens não aparece;
+   o bug nasce exatamente quando o histórico fica útil. */
 .clip-item {
   display: flex;
+  flex: none;
   flex-wrap: wrap;
   gap: 4px;
   align-items: stretch;
