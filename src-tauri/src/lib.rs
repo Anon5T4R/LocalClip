@@ -755,6 +755,17 @@ pub fn run() {
                 let w = win.clone();
                 let handle = app.handle().clone();
                 win.on_window_event(move |event| {
+                    // Bug do tao ≤ 0.35 no GNOME/Wayland: botões da titlebar
+                    // (min/max/fechar) mortos até um resize — no startup e a
+                    // cada hide→show da bandeja (tauri#13440, tauri#11856). O
+                    // toggle de `resizable` em cada foco força o GTK a
+                    // revalidar as decorações. Remover quando o tauri puxar o
+                    // tao 0.36 (via wry 0.56).
+                    #[cfg(target_os = "linux")]
+                    if let WindowEvent::Focused(true) = event {
+                        let _ = w.set_resizable(false);
+                        let _ = w.set_resizable(true);
+                    }
                     if let WindowEvent::CloseRequested { api, .. } = event {
                         let to_tray = with_conn(&handle, |c| {
                             Ok(setting_bool_opt(c, "closeToTray").unwrap_or(false))
