@@ -2404,6 +2404,7 @@ version = "0.7.6"
 dependencies = [
  "base64 0.22.1",
  "clipboard-win",
+ "gtk",
  "image",
  "rusqlite",
  "serde",

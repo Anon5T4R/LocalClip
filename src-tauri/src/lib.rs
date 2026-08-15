@@ -25,6 +25,7 @@ pub struct Db(Mutex<Option<Connection>>);
 /// O copy disparado por NÓS (re-copiar item) não deve voltar pro histórico.
 static SKIP_NEXT: AtomicBool = AtomicBool::new(false);
 
+
 fn with_conn<T>(
     app: &AppHandle,
     f: impl FnOnce(&Connection) -> Result<T, String>,
@@ -647,6 +648,22 @@ fn clear_old_items(app: AppHandle, days: u32) -> Result<u64, String> {
     Ok(n)
 }
 
+/// Contorna a titlebar quebrada do tao <= 0.35 no GNOME/Wayland (CSD propia
+/// com regiao de input morta — causa e fix em tao#1218, so via tauri 2.12):
+/// troca por uma HeaderBar comum com layout forcado min/max/fechar, ANTES do
+/// primeiro map. Sai junto com o upgrade ao tao 0.36 (wry 0.56).
+#[cfg(target_os = "linux")]
+fn instalar_csd_limpa(w: &tauri::WebviewWindow) {
+    use gtk::prelude::*;
+    let Ok(gw) = w.gtk_window() else { return };
+    let header = gtk::HeaderBar::new();
+    header.set_show_close_button(true);
+    header.set_decoration_layout(Some("menu:minimize,maximize,close"));
+    header.set_title(Some("LocalClip"));
+    header.show();
+    gw.set_titlebar(Some(&header));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // ── Contorno da tela branca do webkit: REMOVIDO, e o porquê importa ──────
@@ -717,6 +734,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Db(Mutex::new(None)))
         .setup(|app| {
+
+            #[cfg(target_os = "linux")]
+            if let Some(w) = app.get_webview_window("main") {
+                instalar_csd_limpa(&w);
+            }
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             let conn = open_db(&dir.join("localclip.db")).map_err(std::io::Error::other)?;
